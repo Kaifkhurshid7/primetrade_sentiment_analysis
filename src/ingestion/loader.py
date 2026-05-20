@@ -68,31 +68,47 @@ def load_trades(path: Path = TRADES_FILE) -> pd.DataFrame:
     log.info(f"Loading Trades data from {path}")
     df = pd.read_csv(path)
 
-    df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_")
+    # Keep original header casing but strip whitespace to match real CSV headers
+    df.columns = df.columns.str.strip()
 
-    # Rename common variants
+    # Rename using the real CSV column names → canonical names
     rename_map = {
-        "closedpnl":       "closedPnL",
-        "closed_pnl":      "closedPnL",
-        "pnl":             "closedPnL",
-        "execprice":       "execution_price",
-        "exec_price":      "execution_price",
-        "startposition":   "start_position",
+        "Account":          "account",
+        "Coin":             "symbol",
+        "Execution Price":  "execution_price",
+        "Size Tokens":      "size",
+        "Size USD":         "size_usd",
+        "Side":             "side",
+        "Timestamp IST":    "time",
+        "Start Position":   "start_position",
+        "Direction":        "dir",
+        "Closed PnL":       "closedPnL",
+        "Transaction Hash": "tx_hash",
+        "Order ID":         "order_id",
+        "Crossed":          "crossed",
+        "Fee":              "fee",
+        "Trade ID":         "trade_id",
+        "Timestamp":        "timestamp_utc",
     }
     df.rename(columns={k: v for k, v in rename_map.items() if k in df.columns}, inplace=True)
 
-    # Time parsing
-    df["time"] = pd.to_datetime(df["time"])
+    # Time parsing (IST format like "02-12-2024 22:50:14")
+    df["time"] = pd.to_datetime(df["time"], dayfirst=True, errors="coerce")
+    df = df.dropna(subset=["time"])  # drop rows with unparsable timestamps
     df["date"] = df["time"].dt.normalize()
 
     # Numeric coercion
-    for col in ["execution_price", "size", "closedPnL", "leverage"]:
+    for col in ["execution_price", "size", "size_usd", "closedPnL", "leverage"]:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce")
 
-    # Derived flags
-    df["is_close"] = df["event"].str.upper() == "CLOSE"
-    df["is_long"] = df["side"].str.upper().isin(["BUY", "LONG"])
+    # Ensure required columns exist with sensible defaults
+    if "event" not in df.columns:
+        df["event"] = "CLOSE"
+    if "leverage" not in df.columns:
+        df["leverage"] = 1
+    df["is_long"] = df["dir"].str.strip().str.upper().isin(["BUY", "LONG"])
+    df["is_close"] = df["event"].astype(str).str.upper() == "CLOSE"
     df["is_profitable"] = df["closedPnL"] > 0
 
     # Leverage bucket

@@ -399,21 +399,24 @@ def plot_pnl_violin(df: pd.DataFrame) -> plt.Figure:
     closes = closes[(closes["closedPnL"] >= q01) & (closes["closedPnL"] <= q99)]
 
     fig, ax = plt.subplots(figsize=FIGURE_SIZE_DEFAULT)
+    present_classes = [c for c in SENTIMENT_ORDER if c in closes["classification"].values]
+    data = [closes[closes["classification"] == c]["closedPnL"].values for c in present_classes]
+    positions = list(range(len(present_classes)))
+
     parts = ax.violinplot(
-        [closes[closes["classification"] == c]["closedPnL"].values
-         for c in SENTIMENT_ORDER if c in closes["classification"].values],
-        positions=range(len(SENTIMENT_ORDER)),
+        data,
+        positions=positions,
         showmedians=True,
         showextrema=False,
     )
-    for pc, color in zip(parts["bodies"], [SENTIMENT_COLORS[c] for c in SENTIMENT_ORDER]):
+    for pc, color in zip(parts["bodies"], [SENTIMENT_COLORS[c] for c in present_classes]):
         pc.set_facecolor(color)
         pc.set_alpha(0.75)
     parts["cmedians"].set_color("white")
     parts["cmedians"].set_linewidth(2)
 
-    ax.set_xticks(range(len(SENTIMENT_ORDER)))
-    ax.set_xticklabels(SENTIMENT_ORDER, rotation=20, ha="right")
+    ax.set_xticks(positions)
+    ax.set_xticklabels(present_classes, rotation=20, ha="right")
     ax.axhline(0, color="#aaa", lw=0.8, linestyle="--")
     ax.set_ylabel("Closed PnL (USD)")
     ax.set_title("PnL Distribution by Sentiment (1st–99th percentile)",

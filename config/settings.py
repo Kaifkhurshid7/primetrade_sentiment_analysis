@@ -12,7 +12,7 @@ RAW_DIR = ROOT / "data" / "raw"
 PROCESSED_DIR = ROOT / "data" / "processed"
 FIGURES_DIR = ROOT / "reports" / "figures"
 
-TRADES_FILE = RAW_DIR / "historical_trades.csv"
+TRADES_FILE = RAW_DIR / "historical_data.csv"
 FEAR_GREED_FILE = RAW_DIR / "fear_greed_index.csv"
 MERGED_FILE = PROCESSED_DIR / "merged_dataset.csv"
 
