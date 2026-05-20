@@ -1,9 +1,5 @@
-"""
-tests/test_pipeline.py
+"""Unit tests for ingestion, analysis, and model modules."""
 
-Unit tests for ingestion, analysis, and model modules.
-Run with: pytest tests/ -v
-"""
 import sys
 from pathlib import Path
 
@@ -15,15 +11,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from config.settings import SENTIMENT_ORDER
 from src.analysis.correlation import compute_lag_correlations, contrarian_backtest
-from src.analysis.trader_metrics import (
-    leverage_by_sentiment,
-    pnl_by_sentiment,
-    top_traders,
-)
+from src.analysis.trader_metrics import leverage_by_sentiment, pnl_by_sentiment, top_traders
 from src.ingestion.loader import merge_datasets, validate_merged
 
-
-# ─── Fixtures ─────────────────────────────────────────────────────────────────
 
 @pytest.fixture
 def sample_fg():
@@ -40,29 +30,23 @@ def sample_fg():
 def sample_trades(sample_fg):
     n = 500
     rng = np.random.default_rng(42)
-    dates = pd.to_datetime(
-        rng.choice(sample_fg["date"].values, size=n)
-    )
+    dates = pd.to_datetime(rng.choice(sample_fg["date"].values, size=n))
     df = pd.DataFrame({
-        "account": rng.choice([f"0x{'a' * 40}"], size=n),
-        "symbol": rng.choice(["BTC", "ETH", "SOL"], size=n),
+        "account":         rng.choice([f"0x{'a' * 40}"], size=n),
+        "symbol":          rng.choice(["BTC", "ETH", "SOL"], size=n),
         "execution_price": rng.uniform(100, 50000, n),
-        "size": rng.uniform(0.01, 1.0, n),
-        "side": rng.choice(["BUY", "SELL"], size=n),
-        "time": dates,
-        "date": pd.to_datetime(dates).normalize(),
-        "start_position": rng.uniform(-1, 1, n),
-        "event": rng.choice(["OPEN", "CLOSE"], size=n),
-        "closedPnL": rng.normal(0, 50, n),
-        "leverage": rng.choice([1, 5, 10, 20], size=n),
-        "is_close": None,
-        "is_long": None,
-        "is_profitable": None,
+        "size":            rng.uniform(0.01, 1.0, n),
+        "side":            rng.choice(["BUY", "SELL"], size=n),
+        "time":            dates,
+        "date":            pd.to_datetime(dates).normalize(),
+        "start_position":  rng.uniform(-1, 1, n),
+        "event":           rng.choice(["OPEN", "CLOSE"], size=n),
+        "closedPnL":       rng.normal(0, 50, n),
+        "leverage":        rng.choice([1, 5, 10, 20], size=n),
     })
     df["is_close"] = df["event"] == "CLOSE"
     df["is_long"] = df["side"] == "BUY"
     df["is_profitable"] = df["closedPnL"] > 0
-    # Zero out PnL for OPEN events
     df.loc[~df["is_close"], "closedPnL"] = 0
     return df
 
@@ -71,8 +55,6 @@ def sample_trades(sample_fg):
 def merged(sample_trades, sample_fg):
     return merge_datasets(sample_trades, sample_fg)
 
-
-# ─── Ingestion Tests ──────────────────────────────────────────────────────────
 
 class TestIngestion:
     def test_merge_shape(self, merged, sample_trades):
@@ -85,11 +67,8 @@ class TestIngestion:
     def test_validate_returns_dict(self, merged):
         stats = validate_merged(merged)
         assert isinstance(stats, dict)
-        assert "total_rows" in stats
         assert stats["total_rows"] == len(merged)
 
-
-# ─── Analysis Tests ───────────────────────────────────────────────────────────
 
 class TestAnalysis:
     def test_pnl_by_sentiment_shape(self, merged):
@@ -109,7 +88,6 @@ class TestAnalysis:
         assert (result["mean_leverage"] > 0).all()
 
     def test_top_traders_non_empty(self, merged):
-        # Lower min trades for test
         import config.settings as cfg
         original = cfg.MIN_TRADES_FOR_PROFILING
         cfg.MIN_TRADES_FOR_PROFILING = 1
@@ -129,15 +107,10 @@ class TestAnalysis:
         assert "alpha" in result["summary"]
 
 
-# ─── Smoke Test: Full pipeline (no errors) ───────────────────────────────────
-
 class TestSmoke:
     def test_full_analysis_runs(self, merged, sample_fg):
         """Ensure all analysis functions complete without exceptions."""
-        from src.analysis.correlation import (
-            rolling_sentiment_momentum,
-            sentiment_transition_matrix,
-        )
+        from src.analysis.correlation import rolling_sentiment_momentum, sentiment_transition_matrix
         from src.analysis.trader_metrics import (
             long_short_ratio_by_sentiment,
             pnl_by_symbol_sentiment,

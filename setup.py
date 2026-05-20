@@ -1,4 +1,4 @@
-from setuptools import setup, find_packages
+from setuptools import find_packages, setup
 
 setup(
     name="primetrade_sentiment_analysis",
@@ -11,7 +11,6 @@ setup(
         "seaborn>=0.12.0",
         "scikit-learn>=1.3.0",
         "scipy>=1.11.0",
-        "plotly>=5.15.0",
     ],
     python_requires=">=3.10",
 )

@@ -1,8 +1,5 @@
-"""
-src/analysis/trader_metrics.py
+"""Per-trader and per-sentiment performance metrics."""
 
-Computes per-trader and per-sentiment performance metrics.
-"""
 import sys
 from pathlib import Path
 
@@ -14,19 +11,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from config.settings import MIN_TRADES_FOR_PROFILING, SENTIMENT_ORDER
 
 
-# ─── Core Metrics ─────────────────────────────────────────────────────────────
-
 def compute_close_metrics(df: pd.DataFrame) -> pd.DataFrame:
     """Filter to CLOSE events with valid PnL."""
-    closes = df[df["is_close"] & df["closedPnL"].notna()].copy()
-    return closes
+    return df[df["is_close"] & df["closedPnL"].notna()].copy()
 
 
 def pnl_by_sentiment(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Returns a DataFrame with mean/median PnL, win-rate, trade count,
-    and total PnL per sentiment class.
-    """
+    """Aggregate PnL metrics by sentiment regime."""
     closes = compute_close_metrics(df)
 
     agg = (
@@ -40,7 +31,6 @@ def pnl_by_sentiment(df: pd.DataFrame) -> pd.DataFrame:
         )
         .reset_index()
     )
-
     win_rate = (
         closes.groupby("classification", observed=True)["is_profitable"]
         .mean()
@@ -57,7 +47,7 @@ def pnl_by_sentiment(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def leverage_by_sentiment(df: pd.DataFrame) -> pd.DataFrame:
-    """Average leverage and leverage distribution per sentiment class."""
+    """Average leverage per sentiment class."""
     agg = (
         df.groupby("classification", observed=True)["leverage"]
         .agg(mean_leverage="mean", median_leverage="median", count="count")
@@ -70,7 +60,7 @@ def leverage_by_sentiment(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def long_short_ratio_by_sentiment(df: pd.DataFrame) -> pd.DataFrame:
-    """Proportion of LONG vs SHORT trades under each sentiment."""
+    """Long vs short trade proportion under each sentiment."""
     g = (
         df.groupby(["classification", "is_long"], observed=True)
         .size()
@@ -87,10 +77,7 @@ def long_short_ratio_by_sentiment(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def top_traders(df: pd.DataFrame, top_n: int = 10) -> pd.DataFrame:
-    """
-    Rank traders by total PnL, with win rate and Sharpe-like ratio.
-    Only traders with >= MIN_TRADES_FOR_PROFILING are included.
-    """
+    """Rank traders by total PnL with win rate and Sharpe-like ratio."""
     closes = compute_close_metrics(df)
     grouped = closes.groupby("account")
 
@@ -119,22 +106,18 @@ def bottom_traders(df: pd.DataFrame, top_n: int = 10) -> pd.DataFrame:
 
 
 def trader_sentiment_preference(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    For each trader, compute which sentiment regime they trade most in
-    and their PnL performance across regimes.
-    """
+    """Per-trader PnL breakdown across sentiment regimes."""
     closes = compute_close_metrics(df)
-    pivot = (
+    return (
         closes.groupby(["account", "classification"], observed=True)["closedPnL"]
         .agg(["sum", "mean", "count"])
         .rename(columns={"sum": "total_pnl", "mean": "avg_pnl", "count": "trades"})
         .reset_index()
     )
-    return pivot
 
 
 def daily_pnl_timeseries(df: pd.DataFrame) -> pd.DataFrame:
-    """Daily aggregate PnL with rolling mean."""
+    """Daily aggregate PnL with 7-day rolling mean."""
     closes = compute_close_metrics(df)
     daily = (
         closes.groupby("date")["closedPnL"]
@@ -148,20 +131,16 @@ def daily_pnl_timeseries(df: pd.DataFrame) -> pd.DataFrame:
 def pnl_by_symbol_sentiment(df: pd.DataFrame) -> pd.DataFrame:
     """Mean PnL per symbol × sentiment — used for heatmap."""
     closes = compute_close_metrics(df)
-    pivot = (
+    return (
         closes.groupby(["symbol", "classification"], observed=True)["closedPnL"]
         .mean()
         .unstack("classification")
         .reindex(columns=SENTIMENT_ORDER)
     )
-    return pivot
 
 
-def statistical_tests(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Run Kruskal-Wallis test and pairwise Mann-Whitney U tests
-    to check if PnL distributions differ significantly by sentiment.
-    """
+def statistical_tests(df: pd.DataFrame) -> dict:
+    """Kruskal-Wallis and pairwise Mann-Whitney U tests on PnL by sentiment."""
     closes = compute_close_metrics(df)
     groups = {
         label: closes[closes["classification"] == label]["closedPnL"].dropna().values
@@ -169,7 +148,6 @@ def statistical_tests(df: pd.DataFrame) -> pd.DataFrame:
         if label in closes["classification"].values
     }
 
-    # Kruskal-Wallis (non-parametric ANOVA)
     kw_stat, kw_p = stats.kruskal(*[v for v in groups.values() if len(v) > 1])
 
     records = []
@@ -180,12 +158,14 @@ def statistical_tests(df: pd.DataFrame) -> pd.DataFrame:
             if len(a) > 1 and len(b) > 1:
                 u_stat, p_val = stats.mannwhitneyu(a, b, alternative="two-sided")
                 records.append({
-                    "group_a": labels[i],
-                    "group_b": labels[j],
-                    "u_stat":  round(u_stat, 2),
-                    "p_value": round(p_val, 4),
+                    "group_a":     labels[i],
+                    "group_b":     labels[j],
+                    "u_stat":      round(u_stat, 2),
+                    "p_value":     round(p_val, 4),
                     "significant": p_val < 0.05,
                 })
 
-    result_df = pd.DataFrame(records)
-    return {"kruskal_wallis": {"stat": kw_stat, "p": kw_p}, "pairwise": result_df}
+    return {
+        "kruskal_wallis": {"stat": kw_stat, "p": kw_p},
+        "pairwise": pd.DataFrame(records),
+    }

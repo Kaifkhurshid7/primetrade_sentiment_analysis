@@ -1,18 +1,12 @@
-"""
-scripts/run_pipeline.py
+"""End-to-end pipeline: ingest → analyze → visualize → model → insights."""
 
-One-click runner: loads data → runs all analyses → generates all charts → prints insights.
-Run from project root:   python scripts/run_pipeline.py
-"""
 import sys
 import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-import pandas as pd
-
-from config.settings import FIGURES_DIR, PROCESSED_DIR, SENTIMENT_ORDER
+from config.settings import FIGURES_DIR, PROCESSED_DIR
 from src.analysis.correlation import (
     compute_lag_correlations,
     contrarian_backtest,
@@ -33,8 +27,8 @@ from src.models.sentiment_predictor import SentimentTradePredictor, plot_model_r
 from src.visualization.charts import (
     plot_contrarian_strategy,
     plot_lag_correlation,
-    plot_long_short_ratio,
     plot_leverage_by_sentiment,
+    plot_long_short_ratio,
     plot_pnl_by_sentiment,
     plot_pnl_violin,
     plot_sentiment_distribution,
@@ -48,7 +42,7 @@ PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
 FIGURES_DIR.mkdir(parents=True, exist_ok=True)
 
 
-def section(title: str):
+def _section(title: str):
     print(f"\n{'═' * 60}")
     print(f"  {title}")
     print(f"{'═' * 60}")
@@ -57,22 +51,23 @@ def section(title: str):
 def run():
     t0 = time.time()
 
-    # ── 1. Load Data ──────────────────────────────────────────────────────
-    section("1 / LOADING DATA")
+    # 1. Data ingestion
+    _section("1 / LOADING DATA")
     df = load_and_merge(save=True)
     fg = load_fear_greed()
     stats = validate_merged(df)
+
     print(f"\n  Total rows      : {stats['total_rows']:,}")
     print(f"  CLOSE events    : {stats['close_events']:,}")
     print(f"  Unique accounts : {stats['unique_accounts']}")
     print(f"  Unique symbols  : {stats['unique_symbols']}")
     print(f"  Date range      : {stats['date_range'][0]} → {stats['date_range'][1]}")
-    print(f"  Sentiment dist  :")
+    print("  Sentiment dist  :")
     for k, v in stats["sentiment_coverage"].items():
         print(f"    {k:<15}: {v} days")
 
-    # ── 2. Analysis ───────────────────────────────────────────────────────
-    section("2 / RUNNING ANALYSES")
+    # 2. Analysis
+    _section("2 / RUNNING ANALYSES")
 
     pnl_df = pnl_by_sentiment(df)
     print("\n  PnL by Sentiment:")
@@ -91,12 +86,12 @@ def run():
 
     print(f"\n  Contrarian strategy alpha: ${backtest['summary']['alpha']:.2f}")
     print(f"  Kruskal-Wallis p-value: {stat_tests['kruskal_wallis']['p']:.4f}")
-    print(f"\n  Lag Correlations (Pearson r):")
+    print("\n  Lag Correlations (Pearson r):")
     for _, row in lag_df.iterrows():
         print(f"    Lag {int(row['lag_days']):2d}d: r={row['pearson_r']:+.4f}  (p={row['pearson_p']:.3f})")
 
-    # ── 3. Charts ─────────────────────────────────────────────────────────
-    section("3 / GENERATING CHARTS")
+    # 3. Visualization
+    _section("3 / GENERATING CHARTS")
 
     plot_sentiment_distribution(fg)
     plot_pnl_by_sentiment(pnl_df)
@@ -110,8 +105,8 @@ def run():
     plot_transition_matrix(transition)
     plot_pnl_violin(df)
 
-    # ── 4. ML Model ───────────────────────────────────────────────────────
-    section("4 / ML MODEL — Trade Profitability Predictor")
+    # 4. ML model
+    _section("4 / ML MODEL — Trade Profitability Predictor")
 
     predictor = SentimentTradePredictor()
     predictor.fit(df)
@@ -126,10 +121,9 @@ def run():
         bar = "█" * int(row["importance"] * 200)
         print(f"    {row['feature']:<25} {bar}  {row['importance']:.4f}")
 
-    # ── 5. Key Insights ───────────────────────────────────────────────────
-    section("5 / KEY INSIGHTS")
+    # 5. Summary
+    _section("5 / KEY INSIGHTS")
 
-    # Best sentiment for trading
     best_row = pnl_df.loc[pnl_df["mean_pnl"].idxmax()]
     worst_row = pnl_df.loc[pnl_df["mean_pnl"].idxmin()]
     most_active = pnl_df.loc[pnl_df["trade_count"].idxmax()]
